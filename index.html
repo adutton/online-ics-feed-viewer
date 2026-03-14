@@ -6,6 +6,7 @@
 <link href="./fullcalendar.min.css" rel="stylesheet" />
 <link href="./fullcalendar.print.min.css" rel="stylesheet" media="print" />
 <script src="./lib/moment.min.js"></script>
+<script src="./lib/moment-timezone-with-data.min.js"></script>
 <script src="./lib/jquery.min.js"></script>
 <script src="./fullcalendar.min.js"></script>
 <script src="./ical.min.js"></script>
@@ -20,9 +21,16 @@
     font-size: 14px;
   }
 
-  #calendar, header, h1, footer {
+  #calendar, header, h1, footer, #tz-bar {
     max-width: 900px;
     margin: 0 auto;
+  }
+  #tz-bar {
+    margin-bottom: 10px;
+  }
+  #tz-select {
+    font-size: 13px;
+    padding: 3px 6px;
   }
   .fc-event{
     cursor: pointer;
@@ -32,6 +40,9 @@
     overflow: hidden;
   }
   body.from_url header {
+    display: none;
+  }
+  body.from_url #tz-bar {
     display: none;
   }
   body.from_url footer {
@@ -141,6 +152,41 @@
     <input type="file" id="myfile" name="myfile"  onchange="openFile(event)">
     </p>
   </header>
+  <div id="tz-bar">
+    <label for="tz-select">Convert to timezone:</label>
+    <select id="tz-select">
+      <option value="local">Browser timezone</option>
+      <option value="UTC">UTC</option>
+      <optgroup label="Americas">
+        <option value="America/New_York">America/New_York (Eastern)</option>
+        <option value="America/Chicago">America/Chicago (Central)</option>
+        <option value="America/Denver">America/Denver (Mountain)</option>
+        <option value="America/Los_Angeles">America/Los_Angeles (Pacific)</option>
+        <option value="America/Anchorage">America/Anchorage (Alaska)</option>
+        <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+      </optgroup>
+      <optgroup label="Europe &amp; Africa">
+        <option value="Europe/London">Europe/London (GMT/BST)</option>
+        <option value="Europe/Paris">Europe/Paris (CET)</option>
+        <option value="Europe/Berlin">Europe/Berlin (CET)</option>
+        <option value="Europe/Moscow">Europe/Moscow (MSK)</option>
+        <option value="Africa/Cairo">Africa/Cairo (EET)</option>
+      </optgroup>
+      <optgroup label="Asia &amp; Middle East">
+        <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+        <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+        <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+        <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+        <option value="Asia/Seoul">Asia/Seoul (KST)</option>
+        <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+      </optgroup>
+      <optgroup label="Oceania">
+        <option value="Australia/Sydney">Australia/Sydney (AEST)</option>
+        <option value="Pacific/Auckland">Pacific/Auckland (NZST)</option>
+        <option value="Pacific/Honolulu">Pacific/Honolulu (HST)</option>
+      </optgroup>
+    </select>
+  </div>
   <div id="calendar"></div>
   <div id="popup">
     <div id="popup-content">

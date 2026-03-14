@@ -14,6 +14,8 @@ const value_type_mapping = {
   },
 };
 
+var _lastIcsData = null;
+
 function extractRawVevents(ics_data) {
   var blocks = [];
   var regex = /BEGIN:VEVENT[\s\S]*?END:VEVENT/gi;
@@ -25,6 +27,7 @@ function extractRawVevents(ics_data) {
 }
 
 function load_ics(ics_data) {
+  _lastIcsData = ics_data;
   const parsed = ICAL.parse(ics_data);
   const rawBlocks = extractRawVevents(ics_data);
   var veventIndex = 0;
@@ -34,14 +37,20 @@ function load_ics(ics_data) {
       const [original_key, params, type, original_value] = field;
       const key =
         original_key in mapping ? mapping[original_key] : original_key;
-      const value =
+      var value =
         type in value_type_mapping
           ? value_type_mapping[type](original_value)
           : original_value;
-      event[key] = value;
-      if ((original_key === 'dtstart' || original_key === 'dtend') && params && params.tzid) {
-        event[key + '_tzid'] = params.tzid;
+      // For start/end times: store the original value and TZID for the detail popup,
+      // then convert to UTC for FullCalendar's timezone conversion
+      if (original_key === 'dtstart' || original_key === 'dtend') {
+        event['_orig_' + key] = value;
+        if (params && params.tzid) {
+          event[key + '_tzid'] = params.tzid;
+          value = moment.tz(value, params.tzid).toISOString();
+        }
       }
+      event[key] = value;
       return event;
     }, {});
     event._rawIcs = rawBlocks[veventIndex] || '';
@@ -50,7 +59,31 @@ function load_ics(ics_data) {
   });
   $("#calendar").fullCalendar("removeEventSources");
   $("#calendar").fullCalendar("addEventSource", events);
-  $('#calendar').fullCalendar("option", "timezone", "local");
+}
+
+function getTimezoneOption() {
+  var tz = $('#tz-select').val();
+  if (tz === 'local') return 'local';
+  return tz || 'local';
+}
+
+function applyTimezone() {
+  if (!_lastIcsData) return;
+  var cal = $('#calendar');
+  // Save current view and date so we can restore after reinit
+  var currentView = cal.fullCalendar('getView');
+  var currentDate = cal.fullCalendar('getDate');
+  // Destroy and reinitialize with the new timezone
+  cal.fullCalendar('destroy');
+  initCalendar();
+  if (currentView) {
+    cal.fullCalendar('changeView', currentView.name);
+  }
+  if (currentDate) {
+    cal.fullCalendar('gotoDate', currentDate);
+  }
+  // Re-add the events
+  load_ics(_lastIcsData);
 }
 
 function createShareUrl(feed, cors, title, file) {
@@ -107,7 +140,7 @@ function linkify(text){
   return words.join(' ');
 }
 
-function loadCalendar() {
+function initCalendar() {
   $("#calendar").fullCalendar({
     header: {
       left: "prev,next today",
@@ -115,6 +148,7 @@ function loadCalendar() {
       right: "month,agendaWeek,agendaDay,listMonth",
     },
     defaultView: "month",
+    timezone: getTimezoneOption(),
     views: {
       agendaWeek: {
         columnFormat : "ddd D MMM"
@@ -125,13 +159,42 @@ function loadCalendar() {
     minTime: "0:00:00",
     maxTime: "23:59:59",
     nowIndicator: true,
+    viewRender: function(view) {
+      URIHash.set('view', view.name);
+    },
     eventClick: function(info, jsEvent) {
       jsEvent.preventDefault();
       $('#popup-content h2').text(info['title']);
 
-      // Time and timezone
+      // Time and timezone — show original times from the ICS, not the converted ones
       var timeHtml = '';
-      if (info.start) {
+      var origStart = info['_orig_start'];
+      var origEnd = info['_orig_end'];
+      var startTzid = info['start_tzid'];
+      var endTzid = info['end_tzid'];
+      if (origStart) {
+        var startMoment = startTzid ? moment.tz(origStart, startTzid) : moment(origStart);
+        var fmt = info.allDay ? 'ddd, MMM D, YYYY' : 'ddd, MMM D, YYYY h:mm A';
+        timeHtml = startMoment.format(fmt);
+        if (origEnd) {
+          var endMoment = endTzid ? moment.tz(origEnd, endTzid) : moment(origEnd);
+          if (info.allDay) {
+            if (!endMoment.isSame(startMoment, 'day')) {
+              timeHtml += ' — ' + endMoment.format(fmt);
+            }
+          } else {
+            if (endMoment.isSame(startMoment, 'day')) {
+              timeHtml += ' — ' + endMoment.format('h:mm A');
+            } else {
+              timeHtml += ' — ' + endMoment.format(fmt);
+            }
+          }
+        }
+        if (!info.allDay && startTzid) {
+          timeHtml += ' <span style="color:#999;">(' + escapeHtml(startTzid) + ')</span>';
+        }
+      } else if (info.start) {
+        // Fallback if no original times stored (e.g. no TZID in ICS)
         var startMoment = moment(info.start);
         var fmt = info.allDay ? 'ddd, MMM D, YYYY' : 'ddd, MMM D, YYYY h:mm A';
         timeHtml = startMoment.format(fmt);
@@ -147,14 +210,6 @@ function loadCalendar() {
             } else {
               timeHtml += ' — ' + endMoment.format(fmt);
             }
-          }
-        }
-        if (!info.allDay) {
-          var eventTz = info['start_tzid'] || info['end_tzid'] || null;
-          if (eventTz) {
-            timeHtml += ' <span style="color:#999;">(' + escapeHtml(eventTz) + ')</span>';
-          } else if (info.start && info.start.toISOString && info.start.toISOString().endsWith('Z')) {
-            timeHtml += ' <span style="color:#999;">(UTC)</span>';
           }
         }
       }
@@ -184,6 +239,9 @@ function loadCalendar() {
       return false;
     }
   });
+}
+
+function loadCalendar() {
   const url_feed = URIHash.get("feed");
   const url_file = URIHash.get("file");
   const url_cors = URIHash.get("cors") === "true";
@@ -191,6 +249,7 @@ function loadCalendar() {
   const url_hideinput = URIHash.get("hideinput") === 'true';
   const url_view = URIHash.get("view");
   const url_startdate = URIHash.get("startdate");
+  const url_tz = URIHash.get("tz");
   console.log({
     url_feed,
     url_file,
@@ -198,8 +257,14 @@ function loadCalendar() {
     url_title,
     url_hideinput,
     url_view,
-    url_startdate
+    url_startdate,
+    url_tz
   });
+  // Set timezone dropdown before initializing calendar
+  if (url_tz) {
+    $('#tz-select').val(url_tz);
+  }
+  initCalendar();
   if (url_title) {
     $("h1").text(url_title);
   }
@@ -224,6 +289,15 @@ function loadCalendar() {
   if (url_startdate) {
       $('#calendar').fullCalendar("gotoDate", url_startdate);
   }
+  $('#tz-select').on('change', function() {
+    var tz = $(this).val();
+    if (tz) {
+      URIHash.set('tz', tz);
+    } else {
+      URIHash.set('tz', '');
+    }
+    applyTimezone();
+  });
   $('#share input').click(function(){
     if ($("#cors-enabled").is(":checked")) {
       URIHash.set('hideinput', 'true')
