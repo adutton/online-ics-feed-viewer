@@ -14,12 +14,24 @@ const value_type_mapping = {
   },
 };
 
+function extractRawVevents(ics_data) {
+  var blocks = [];
+  var regex = /BEGIN:VEVENT[\s\S]*?END:VEVENT/gi;
+  var match;
+  while ((match = regex.exec(ics_data)) !== null) {
+    blocks.push(match[0]);
+  }
+  return blocks;
+}
+
 function load_ics(ics_data) {
   const parsed = ICAL.parse(ics_data);
+  const rawBlocks = extractRawVevents(ics_data);
+  var veventIndex = 0;
   const events = parsed[2].map(([type, event_fields]) => {
     if (type !== "vevent") return;
-    return event_fields.reduce((event, field) => {
-      const [original_key, _, type, original_value] = field;
+    var event = event_fields.reduce((event, field) => {
+      const [original_key, params, type, original_value] = field;
       const key =
         original_key in mapping ? mapping[original_key] : original_key;
       const value =
@@ -27,8 +39,14 @@ function load_ics(ics_data) {
           ? value_type_mapping[type](original_value)
           : original_value;
       event[key] = value;
+      if ((original_key === 'dtstart' || original_key === 'dtend') && params && params.tzid) {
+        event[key + '_tzid'] = params.tzid;
+      }
       return event;
     }, {});
+    event._rawIcs = rawBlocks[veventIndex] || '';
+    veventIndex++;
+    return event;
   });
   $("#calendar").fullCalendar("removeEventSources");
   $("#calendar").fullCalendar("addEventSource", events);
@@ -110,6 +128,39 @@ function loadCalendar() {
     eventClick: function(info, jsEvent) {
       jsEvent.preventDefault();
       $('#popup-content h2').text(info['title']);
+
+      // Time and timezone
+      var timeHtml = '';
+      if (info.start) {
+        var startMoment = moment(info.start);
+        var fmt = info.allDay ? 'ddd, MMM D, YYYY' : 'ddd, MMM D, YYYY h:mm A';
+        timeHtml = startMoment.format(fmt);
+        if (info.end) {
+          var endMoment = moment(info.end);
+          if (info.allDay) {
+            if (!endMoment.isSame(startMoment, 'day')) {
+              timeHtml += ' — ' + endMoment.format(fmt);
+            }
+          } else {
+            if (endMoment.isSame(startMoment, 'day')) {
+              timeHtml += ' — ' + endMoment.format('h:mm A');
+            } else {
+              timeHtml += ' — ' + endMoment.format(fmt);
+            }
+          }
+        }
+        if (!info.allDay) {
+          var eventTz = info['start_tzid'] || info['end_tzid'] || null;
+          if (eventTz) {
+            timeHtml += ' <span style="color:#999;">(' + escapeHtml(eventTz) + ')</span>';
+          } else if (info.start && info.start.toISOString && info.start.toISOString().endsWith('Z')) {
+            timeHtml += ' <span style="color:#999;">(UTC)</span>';
+          }
+        }
+      }
+      $('.popup-time').html(timeHtml);
+
+      // Description
       const popup_content = $('#popup-content p');
       popup_content.empty();
       if (info['description']) {
@@ -117,12 +168,18 @@ function loadCalendar() {
           popup_content.append($("<span></span>").html(linkify(escapeHtml(item))));
         });
       }
+
+      // URL link
       var popup_link = $('#popup-content .popup-link');
       if (info['url']) {
         popup_link.attr('href', info['url']).text(info['url']).show();
       } else {
         popup_link.hide();
       }
+
+      // Raw ICS data
+      $('#popup-raw').text(info._rawIcs || 'No raw ICS data available').hide();
+
       $('#popup').show();
       return false;
     }
@@ -179,6 +236,9 @@ function loadCalendar() {
   });
   $('#popup-close').on('click', function() {
     $('#popup').hide();
+  });
+  $('#popup-raw-toggle').on('click', function() {
+    $('#popup-raw').toggle();
   });
 };
 $(document).keyup(function(e) {
