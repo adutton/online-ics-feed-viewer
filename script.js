@@ -32,6 +32,7 @@ function load_ics(ics_data) {
   });
   $("#calendar").fullCalendar("removeEventSources");
   $("#calendar").fullCalendar("addEventSource", events);
+  $('#calendar').fullCalendar("option", "timezone", "local");
 }
 
 function createShareUrl(feed, cors, title, file) {
@@ -68,29 +69,69 @@ function fetch_ics_feed(url, cors, show_share) {
     createShareUrl(url, !!cors, "My Feed");
   }
 }
-$(document).ready(function () {
+
+function escapeHtml(unsafe) {
+  return unsafe
+       .replace(/&/g, "&amp;")
+       .replace(/</g, "&lt;")
+       .replace(/>/g, "&gt;")
+       .replace(/"/g, "&quot;")
+       .replace(/'/g, "&#039;");
+}
+
+function linkify(text){
+  const words = text.split(' ');
+  for (i in words) {
+      if (words[i].indexOf('http://') == 0 || words[i].indexOf('https://') == 0) {
+          words[i] = '<a href="' + words[i] + '">' + words[i] + '</a>';
+      }
+  }
+  return words.join(' ');
+}
+
+function loadCalendar() {
   $("#calendar").fullCalendar({
     header: {
       left: "prev,next today",
       center: "title",
       right: "month,agendaWeek,agendaDay,listMonth",
     },
+    defaultView: "month",
+    views: {
+      agendaWeek: {
+        columnFormat : "ddd D MMM"
+      }
+    },
     navLinks: true,
     editable: false,
-    minTime: "7:30:00",
-    maxTime: "21:30:00",
+    minTime: "0:00:00",
+    maxTime: "23:59:59",
+    nowIndicator: true,
+    eventClick: function(info) {
+      $('#popup-content h2').text(info['title']);
+      const popup_content = $('#popup-content p');
+      popup_content.empty();
+      info['description'].split("\n").forEach(function (item) {
+        popup_content.append($("<span></span>").html(linkify(escapeHtml(item))));
+      });
+      $('#popup').show();
+    }
   });
   const url_feed = URIHash.get("feed");
   const url_file = URIHash.get("file");
   const url_cors = URIHash.get("cors") === "true";
   const url_title = URIHash.get("title");
   const url_hideinput = URIHash.get("hideinput") === 'true';
+  const url_view = URIHash.get("view");
+  const url_startdate = URIHash.get("startdate");
   console.log({
     url_feed,
     url_file,
     url_cors,
     url_title,
     url_hideinput,
+    url_view,
+    url_startdate
   });
   if (url_title) {
     $("h1").text(url_title);
@@ -110,6 +151,12 @@ $(document).ready(function () {
   if (url_hideinput) {
     $("body").addClass("from_url");
   }
+  if (url_view) {
+      $('#calendar').fullCalendar("changeView", url_view);
+  }
+  if (url_startdate) {
+      $('#calendar').fullCalendar("gotoDate", url_startdate);
+  }
   $('#share input').click(function(){
     if ($("#cors-enabled").is(":checked")) {
       URIHash.set('hideinput', 'true')
@@ -120,4 +167,17 @@ $(document).ready(function () {
     const url = $("#eventsource").val();
     fetch_ics_feed(url, corsAnywhereOn, true);
   });
+  $('#popup-close').on('click', function() {
+    $('#popup').hide();
+  });
+};
+$(document).keyup(function(e) {
+  if (e.which == 27) {
+    $('#popup').hide();
+  }
+});
+$(document).ready(function () {
+    $(window).on('hashchange', function () {
+        loadCalendar();
+    }).trigger('hashchange');
 });
