@@ -107,14 +107,24 @@ function loadCalendar() {
     minTime: "0:00:00",
     maxTime: "23:59:59",
     nowIndicator: true,
-    eventClick: function(info) {
+    eventClick: function(info, jsEvent) {
+      jsEvent.preventDefault();
       $('#popup-content h2').text(info['title']);
       const popup_content = $('#popup-content p');
       popup_content.empty();
-      info['description'].split("\n").forEach(function (item) {
-        popup_content.append($("<span></span>").html(linkify(escapeHtml(item))));
-      });
+      if (info['description']) {
+        info['description'].split("\n").forEach(function (item) {
+          popup_content.append($("<span></span>").html(linkify(escapeHtml(item))));
+        });
+      }
+      var popup_link = $('#popup-content .popup-link');
+      if (info['url']) {
+        popup_link.attr('href', info['url']).text(info['url']).show();
+      } else {
+        popup_link.hide();
+      }
       $('#popup').show();
+      return false;
     }
   });
   const url_feed = URIHash.get("feed");
