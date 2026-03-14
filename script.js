@@ -26,12 +26,11 @@ function extractRawVevents(ics_data) {
   return blocks;
 }
 
-function load_ics(ics_data) {
-  _lastIcsData = ics_data;
+function parseIcsEvents(ics_data) {
   const parsed = ICAL.parse(ics_data);
   const rawBlocks = extractRawVevents(ics_data);
   var veventIndex = 0;
-  const events = parsed[2].map(([type, event_fields]) => {
+  return parsed[2].map(([type, event_fields]) => {
     if (type !== "vevent") return;
     var event = event_fields.reduce((event, field) => {
       const [original_key, params, type, original_value] = field;
@@ -41,13 +40,18 @@ function load_ics(ics_data) {
         type in value_type_mapping
           ? value_type_mapping[type](original_value)
           : original_value;
-      // For start/end times: store the original value and TZID for the detail popup,
-      // then convert to UTC for FullCalendar's timezone conversion
       if (original_key === 'dtstart' || original_key === 'dtend') {
+        // Store the original value and TZID for the detail popup
         event['_orig_' + key] = value;
         if (params && params.tzid) {
           event[key + '_tzid'] = params.tzid;
-          value = moment.tz(value, params.tzid).toISOString();
+          // Convert to UTC for consistent internal representation
+          event['_utc_' + key] = moment.tz(value, params.tzid).toISOString();
+        } else if (typeof value === 'string' && value.endsWith('Z')) {
+          event['_utc_' + key] = value;
+        } else {
+          // Floating time — no timezone info, treat as-is
+          event['_utc_' + key] = null;
         }
       }
       event[key] = value;
@@ -57,8 +61,36 @@ function load_ics(ics_data) {
     veventIndex++;
     return event;
   });
+}
+
+function convertEventsForDisplay(events) {
+  var tz = getTimezoneOption();
+  return events.map(function(event) {
+    if (!event) return event;
+    var display = $.extend({}, event);
+    // Convert start/end to the target timezone for calendar display
+    ['start', 'end'].forEach(function(key) {
+      var utcVal = event['_utc_' + key];
+      if (utcVal) {
+        if (tz === 'local') {
+          // moment parses UTC and converts to local
+          display[key] = moment(utcVal).format('YYYY-MM-DDTHH:mm:ss');
+        } else {
+          // Convert UTC to named timezone
+          display[key] = moment(utcVal).tz(tz).format('YYYY-MM-DDTHH:mm:ss');
+        }
+      }
+    });
+    return display;
+  });
+}
+
+function load_ics(ics_data) {
+  _lastIcsData = ics_data;
+  var events = parseIcsEvents(ics_data);
+  var displayEvents = convertEventsForDisplay(events);
   $("#calendar").fullCalendar("removeEventSources");
-  $("#calendar").fullCalendar("addEventSource", events);
+  $("#calendar").fullCalendar("addEventSource", displayEvents);
 }
 
 function getTimezoneOption() {
@@ -70,20 +102,11 @@ function getTimezoneOption() {
 function applyTimezone() {
   if (!_lastIcsData) return;
   var cal = $('#calendar');
-  // Save current view and date so we can restore after reinit
-  var currentView = cal.fullCalendar('getView');
-  var currentDate = cal.fullCalendar('getDate');
-  // Destroy and reinitialize with the new timezone
-  cal.fullCalendar('destroy');
-  initCalendar();
-  if (currentView) {
-    cal.fullCalendar('changeView', currentView.name);
-  }
-  if (currentDate) {
-    cal.fullCalendar('gotoDate', currentDate);
-  }
-  // Re-add the events
-  load_ics(_lastIcsData);
+  // Re-parse and convert events for the new timezone
+  var events = parseIcsEvents(_lastIcsData);
+  var displayEvents = convertEventsForDisplay(events);
+  cal.fullCalendar("removeEventSources");
+  cal.fullCalendar("addEventSource", displayEvents);
 }
 
 function createShareUrl(feed, cors, title, file) {
