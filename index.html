@@ -56,6 +56,13 @@
     padding: 4px;
     width: 20%
   }
+  #ics-text {
+    width: 70%;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 4px;
+    margin-top: 4px;
+  }
   .line {
     display: flex;
   }
@@ -145,6 +152,11 @@
     <p>
     <label for="myfile">or select local file</label>
     <input type="file" id="myfile" name="myfile"  onchange="openFile(event)">
+    </p>
+    <p>
+    <label for="ics-text">or paste ICS text</label><br>
+    <textarea id="ics-text" rows="6" placeholder="BEGIN:VCALENDAR&#10;...&#10;END:VCALENDAR"></textarea><br>
+    <button id="load-text">load</button>
     </p>
   </header>
   <div id="tz-bar">

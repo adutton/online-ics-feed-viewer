@@ -470,6 +470,12 @@ function bindEventListeners() {
     var url = document.getElementById("eventsource").value;
     fetch_ics_feed(url, corsAnywhereOn, true);
   });
+  document.getElementById("load-text").addEventListener('click', function() {
+    var text = document.getElementById("ics-text").value.trim();
+    if (text) {
+      load_ics(text);
+    }
+  });
   document.getElementById('popup-close').addEventListener('click', function() {
     document.getElementById('popup').style.display = 'none';
   });
