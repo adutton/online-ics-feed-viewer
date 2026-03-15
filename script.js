@@ -222,7 +222,12 @@ function openFile(event) {
 }
 
 function load_ics_from_base64(input) {
-  const contents = atob(input);
+  const binary = atob(input);
+  const bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const contents = new TextDecoder('utf-8').decode(bytes);
   load_ics(contents);
 }
 
