@@ -3,13 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <title>Online ICS feed viewer</title>
-<link href="./fullcalendar.min.css" rel="stylesheet" />
-<link href="./fullcalendar.print.min.css" rel="stylesheet" media="print" />
-<script src="./lib/moment.min.js"></script>
-<script src="./lib/moment-timezone-with-data.min.js"></script>
-<script src="./lib/jquery.min.js"></script>
-<script src="./fullcalendar.min.js"></script>
-<script src="./ical.min.js"></script>
+<script src="./lib/fullcalendar.global.min.js"></script>
+<script src="./lib/ical.min.js"></script>
 <script src="./urlhash.js"></script>
 <script src="./script.js"></script>
 <style>
@@ -35,7 +30,7 @@
   .fc-event{
     cursor: pointer;
   }
-  .fc-time-grid-event {
+  .fc-timegrid-event {
     min-height: 25px;
     overflow: hidden;
   }
