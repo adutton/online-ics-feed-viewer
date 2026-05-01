@@ -121,40 +121,102 @@ function extractRawVevents(ics_data) {
   return blocks;
 }
 
+// Window for expanding recurring events. Open-ended RRULEs would otherwise
+// iterate forever; ical.js needs an explicit bound from the caller.
+const RECUR_EXPAND_YEARS_BACK = 2;
+const RECUR_EXPAND_YEARS_FORWARD = 2;
+const MAX_OCCURRENCES_PER_EVENT = 1000;
+
+function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+// Convert an ICAL.Time into the field shape the rest of the code expects.
+function icalTimeFields(time) {
+  if (!time) return null;
+  if (time.isDate) {
+    var dateStr = time.year + '-' + pad2(time.month) + '-' + pad2(time.day);
+    return { iso: dateStr, tzid: null, utc: null };
+  }
+  var tzid = time.zone && time.zone.tzid ? time.zone.tzid : null;
+  var isUtc = tzid === 'UTC' || tzid === 'Z' || (time.zone && time.zone === ICAL.Timezone.utcTimezone);
+  var isFloating = !tzid || tzid === 'floating';
+  var iso = time.year + '-' + pad2(time.month) + '-' + pad2(time.day) + 'T' +
+            pad2(time.hour) + ':' + pad2(time.minute) + ':' + pad2(time.second);
+  var utc = null;
+  if (isUtc) {
+    utc = iso + 'Z';
+  } else if (!isFloating) {
+    utc = tzToUTC(iso, tzid);
+  }
+  return {
+    iso: iso,
+    tzid: isUtc || isFloating ? null : tzid,
+    utc: utc
+  };
+}
+
+function buildEventEntry(icalEvent, startTime, endTime, rawIcs) {
+  var event = {
+    title: icalEvent.summary || 'Untitled',
+    description: icalEvent.description || '',
+    location: icalEvent.location || '',
+    url: icalEvent.component.getFirstPropertyValue('url') || '',
+    _rawIcs: rawIcs
+  };
+  var s = icalTimeFields(startTime);
+  if (s) {
+    event.start = s.iso;
+    event._orig_start = s.iso;
+    event.start_tzid = s.tzid;
+    event._utc_start = s.utc;
+  }
+  var e = icalTimeFields(endTime);
+  if (e) {
+    event.end = e.iso;
+    event._orig_end = e.iso;
+    event.end_tzid = e.tzid;
+    event._utc_end = e.utc;
+  }
+  return event;
+}
+
 function parseIcsEvents(ics_data) {
-  const parsed = ICAL.parse(ics_data);
+  const jcal = ICAL.parse(ics_data);
+  const vcalendar = new ICAL.Component(jcal);
+  const vevents = vcalendar.getAllSubcomponents('vevent');
   const rawBlocks = extractRawVevents(ics_data);
-  var veventIndex = 0;
-  return parsed[2].map(([type, event_fields]) => {
-    if (type !== "vevent") return;
-    var event = event_fields.reduce((event, field) => {
-      const [original_key, params, type, original_value] = field;
-      const key =
-        original_key in mapping ? mapping[original_key] : original_key;
-      var value =
-        type in value_type_mapping
-          ? value_type_mapping[type](original_value)
-          : original_value;
-      if (original_key === 'dtstart' || original_key === 'dtend') {
-        event['_orig_' + key] = value;
-        if (params && params.tzid) {
-          event[key + '_tzid'] = params.tzid;
-          // Build an ISO string with timezone offset using Intl
-          event['_utc_' + key] = tzToUTC(value, params.tzid);
-        } else if (typeof value === 'string' && value.endsWith('Z')) {
-          event['_utc_' + key] = value;
-        } else {
-          // Floating time — no timezone info
-          event['_utc_' + key] = null;
-        }
+
+  var now = new Date();
+  var expandStart = new Date(Date.UTC(now.getUTCFullYear() - RECUR_EXPAND_YEARS_BACK, 0, 1));
+  var expandEnd = new Date(Date.UTC(now.getUTCFullYear() + RECUR_EXPAND_YEARS_FORWARD, 11, 31));
+
+  var result = [];
+  vevents.forEach(function(vevent, idx) {
+    var icalEvent = new ICAL.Event(vevent);
+    var rawIcs = rawBlocks[idx] || '';
+    if (icalEvent.isRecurring()) {
+      var iter = icalEvent.iterator();
+      var next;
+      var emitted = 0;
+      var stepped = 0;
+      // Cap on iterator steps in case an RRULE produces nothing in-window;
+      // emitted is the cap on what we hand to FullCalendar.
+      var maxSteps = MAX_OCCURRENCES_PER_EVENT * 5;
+      while (emitted < MAX_OCCURRENCES_PER_EVENT && stepped < maxSteps) {
+        next = iter.next();
+        if (!next) break;
+        stepped++;
+        var jsDate = next.toJSDate();
+        if (jsDate > expandEnd) break;
+        if (jsDate < expandStart) continue;
+        var details = icalEvent.getOccurrenceDetails(next);
+        result.push(buildEventEntry(icalEvent, details.startDate, details.endDate, rawIcs));
+        emitted++;
       }
-      event[key] = value;
-      return event;
-    }, {});
-    event._rawIcs = rawBlocks[veventIndex] || '';
-    veventIndex++;
-    return event;
+    } else {
+      result.push(buildEventEntry(icalEvent, icalEvent.startDate, icalEvent.endDate, rawIcs));
+    }
   });
+  return result;
 }
 
 // Convert a datetime string in a given IANA timezone to a UTC ISO string

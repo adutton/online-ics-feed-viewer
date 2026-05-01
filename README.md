@@ -11,7 +11,27 @@ Sibling project to [online-openapi-viewer](https://github.com/adutton/online-ope
 
 ## Example feeds
 
-- [US Holidays (Thunderbird)](https://www.thunderbird.net/media/caldata/autogen/USHolidays.ics)
+- [US Holidays (Calendar Labs)](https://ics.calendarlabs.com/76/0d86dd9d/US_Holidays.ics)
+- [Bundled `sample.ics`](./sample.ics) (a snapshot of the above, served alongside the viewer)
+
+## Example paste
+
+A minimal recurring event you can paste straight into the "Paste ICS contents" box:
+
+```
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example//Family Dinner//EN
+BEGIN:VEVENT
+UID:family-dinner@example.com
+DTSTAMP:20260101T000000Z
+DTSTART:20260108T010000Z
+DTEND:20260108T023000Z
+RRULE:FREQ=WEEKLY;BYDAY=WE
+SUMMARY:Family Dinner
+END:VEVENT
+END:VCALENDAR
+```
 
 ## Hash parameters
 
