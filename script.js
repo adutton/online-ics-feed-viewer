@@ -379,6 +379,15 @@ function loadIcsFromBase64(input) {
   loadIcs(contents);
 }
 
+function utf8ToBase64(str) {
+  var bytes = new TextEncoder().encode(str);
+  var binary = '';
+  for (var i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 // Public CORS proxies sometimes return short plaintext error blobs
 // (e.g. "error code: 522") with a 200 status. Reject those before
 // handing them to the parser, which would fail with confusing errors.
@@ -689,9 +698,15 @@ function bindEventListeners() {
   document.getElementById('load-text').addEventListener('click', function() {
     var text = document.getElementById('ics-text').value.trim();
     if (!text) return;
-    // Pasted text isn't shareable via URL.
-    clearFeedFileUrlState();
-    hideShareLink();
+    var b64 = utf8ToBase64(text);
+    if (b64.length > MAX_SHAREABLE_BASE64) {
+      // Too big to round-trip via the URL; render but skip the share link.
+      clearFeedFileUrlState();
+      hideShareLink();
+      setStatus('Pasted text is too large to share via URL; rendering locally only.');
+    } else {
+      applyFileUrlState(b64);
+    }
     loadIcs(text);
   });
   document.getElementById('toggle-form').addEventListener('click', function() {
