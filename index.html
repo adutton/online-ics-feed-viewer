@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Online ICS feed viewer</title>
 <script src="./lib/fullcalendar.global.min.js"></script>
 <script src="./lib/ical.min.js"></script>
@@ -10,13 +11,13 @@
 <style>
 
   body {
-    margin: 40px 10px;
+    margin: 10px;
     padding: 0;
     font-family: "Lucida Grande", Helvetica, Arial, Verdana, sans-serif;
     font-size: 14px;
   }
 
-  #calendar, header, h1, footer, #tz-bar {
+  #calendar, header, h1, #status, #tz-bar {
     max-width: 900px;
     margin: 0 auto;
   }
@@ -34,45 +35,125 @@
     min-height: 25px;
     overflow: hidden;
   }
-  body.from_url header {
+  body.from_url header,
+  body.from_url #tz-bar,
+  body.from_url h1 {
     display: none;
   }
-  body.from_url #tz-bar {
-    display: none;
-  }
-  body.from_url footer {
-    display: none;
+  body.from_url {
+    margin: 0;
   }
   header, h1 {
-    margin: 0 auto 20px
+    margin: 0 auto 20px;
   }
-  input[type="text"] {
-    width: 70%;
-    font-size: medium;
-    padding: 4px
-  }
-  header button {
+  header input[type="text"] {
+    flex: 1;
     font-size: medium;
     padding: 4px;
-    width: 20%
+  }
+  header button {
+    background: #2196F3;
+    color: #fff;
+    border: 1px solid #1976D2;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: medium;
+    padding: 4px 12px;
+    white-space: nowrap;
+    min-width: 160px;
+  }
+  header button:hover {
+    background: #1976D2;
   }
   #ics-text {
-    width: 70%;
+    flex: 1;
+    box-sizing: border-box;
     font-family: monospace;
     font-size: 12px;
     padding: 4px;
-    margin-top: 4px;
   }
   .line {
     display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .action {
+    margin: 0 0 14px;
+  }
+  .action-label {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #444;
+  }
+  .action #myfile {
+    flex: 1;
+  }
+  .action .hint {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 13px;
+    color: #555;
+  }
+  .action-reset {
+    justify-content: flex-end;
+  }
+  .action-reset button {
+    background: #fff;
+    color: #555;
+    border: 1px solid #ccc;
+  }
+  .action-reset button:hover {
+    background: #f0f0f0;
+  }
+  #share-link {
+    color: #1976D2;
+    text-decoration: none;
+    margin-right: 4px;
+    font-size: 13px;
+  }
+  #share-link:hover {
+    text-decoration: underline;
   }
 
-  small.source {
-    position: absolute;
-    right: 3px; bottom: 3px;
+  #topbar {
+    position: fixed;
+    top: 6px; right: 8px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: rgba(255,255,255,0.85);
+    padding: 3px 8px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 1000;
   }
-  #share {
-    display: none;
+  #topbar button {
+    background: transparent;
+    color: #555;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+  }
+  #topbar button:hover,
+  #topbar a:hover {
+    color: #1976D2;
+  }
+  #topbar a {
+    color: #555;
+    text-decoration: none;
+  }
+  #topbar .sep {
+    color: #ccc;
+  }
+
+  #status {
+    margin: 8px auto;
+    color: #555;
+  }
+  #status.error {
+    color: #b00;
   }
 
   #popup {
@@ -142,23 +223,43 @@
 </style>
 </head>
 <body>
+  <div id="topbar">
+    <button id="toggle-form" type="button">Hide form</button>
+    <span class="sep">|</span>
+    <a href="https://github.com/adutton/online-ics-feed-viewer" target="_blank" rel="noopener">source</a>
+  </div>
   <h1>Online ICS / iCal feed viewer</h1>
   <header>
-    <p class="line">
-    <input type="text" id="eventsource" placeholder="copy/paste the url and press fetch...">
-    <button id="fetch">fetch</button><br>
-    <label>CORS ignored?<input type="checkbox" id="cors-enabled" checked="checked"></label>
-    </p>
-    <p>
-    <label for="myfile">or select local file</label>
-    <input type="file" id="myfile" name="myfile"  onchange="openFile(event)">
-    </p>
-    <p>
-    <label for="ics-text">or paste ICS file contents</label><br>
-    <textarea id="ics-text" rows="6" placeholder="BEGIN:VCALENDAR&#10;...&#10;END:VCALENDAR"></textarea><br>
-    <button id="load-text">load</button>
-    </p>
+    <form class="action" id="fetch-form">
+      <div class="action-label">Fetch from a URL</div>
+      <div class="line">
+        <input type="text" id="eventsource" placeholder="copy/paste the url and press fetch...">
+        <button id="fetch" type="submit">Fetch URL</button>
+      </div>
+      <label class="hint"><input type="checkbox" id="cors-enabled"> route through CORS proxy</label>
+    </form>
+
+    <div class="action">
+      <div class="action-label">Load a local file</div>
+      <div class="line">
+        <input type="file" id="myfile" name="myfile" accept=".ics,text/calendar">
+        <button id="load-file" type="button">Load File</button>
+      </div>
+    </div>
+
+    <div class="action">
+      <div class="action-label">Paste ICS contents</div>
+      <div class="line">
+        <textarea id="ics-text" rows="6" placeholder="BEGIN:VCALENDAR&#10;...&#10;END:VCALENDAR"></textarea>
+        <button id="load-text" type="button">Render</button>
+      </div>
+    </div>
+
+    <div class="line action-reset">
+      <a href="#" id="share-link" hidden>Share this link</a>
+    </div>
   </header>
+  <div id="status"></div>
   <div id="tz-bar">
     <label for="tz-select">Convert to timezone:</label>
     <select id="tz-select">
@@ -206,12 +307,5 @@
       <a id="popup-close" href="javascript:void(0)">&times;</a>
     </div>
   </div>
-  <footer class="line" id="share">
-    Hide input when sharing url:
-    <input type="checkbox">
-  </footer>
-  <small class="source">
-    <a href="https://github.com/adutton/online-ics-feed-viewer">source</a>
-  </small>
 </body>
 </html>
