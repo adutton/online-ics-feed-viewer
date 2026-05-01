@@ -578,6 +578,7 @@ function loadCalendar() {
   initCalendar();
   if (url_title) {
     document.querySelector("h1").textContent = url_title;
+    document.title = url_title;
   }
   if (url_cors) {
     document.getElementById("cors-enabled").checked = true;
